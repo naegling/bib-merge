@@ -1,0 +1,94 @@
+#!/usr/bin/env python3
+
+import argparse
+import sys
+import bibtexparser
+import nltk
+from nltk import word_tokenize, pos_tag
+from nltk.corpus import stopwords
+from nltk.stem.wordnet import WordNetLemmatizer
+from nltk.corpus import wordnet as wn
+from collections import defaultdict
+
+
+def main(args):
+
+  if args.download:
+    nltk.download('stopwords')
+    nltk.download('punkt')
+    nltk.download('wordnet')
+    nltk.download('averaged_perceptron_tagger')
+
+  parser = bibtexparser.bparser.BibTexParser(common_strings = True)
+  stop_words = set(stopwords.words('english'))
+  lemmatizer = WordNetLemmatizer()
+  tag_map = defaultdict(lambda: wn.NOUN)
+  tag_map['J'] = wn.ADJ
+  tag_map['V'] = wn.VERB
+  tag_map['R'] = wn.ADV
+
+  db = None
+  for bib in args.bibs:
+    with open(bib) as infile:
+      db = bibtexparser.load(infile, parser)
+
+  map_title_entries = defaultdict(lambda: [])
+  cite_keys = set()
+  dup_keys = set()
+
+  for entry in db.entries:
+    key = entry['ID']
+    if key in cite_keys:
+      dup_keys.add(key)
+    else:
+      cite_keys.add(key)
+
+    words = word_tokenize(entry['title'])
+    filtered_words = []
+    for word, pos in pos_tag(words):
+      if pos.isalpha():
+        word = lemmatizer.lemmatize(word.lower(), tag_map[pos[0]])
+        if word not in stop_words:
+          filtered_words.append(word)
+
+    filtered_title = ' '.join(filtered_words)
+    map_title_entries[filtered_title].append(entry)
+
+  dup_counter = len(dup_keys)
+  if dup_counter > 0:
+    print('Duplicate cite keys: ', ', '.join(dup_keys), file=sys.stderr)
+
+  for title, entries in map_title_entries.items():
+    if len(entries) > 1:
+      dup_counter += 1
+      keys = []
+      for entry in entries:
+        key = entry['ID']
+        if key not in dup_keys:
+          keys.append(entry['ID'])
+      if len(keys) > 0:
+        print('Duplicate titles: ', ', '.join(keys), file=sys.stderr)
+
+  if dup_counter == 0 or args.force:
+
+    if args.output:
+      sys.stdout = open(args.output, 'w')
+
+    bib_writer = bibtexparser.bwriter.BibTexWriter(write_common_strings=True)
+    bib_writer.indent = '  '
+    for line in bibtexparser.dumps(db, bib_writer).splitlines():
+      print(line)
+
+  return 0
+
+
+if __name__ == "__main__":
+
+  parser = argparse.ArgumentParser(description='safe merge of bibtex files')
+  parser.add_argument('bibs', metavar='paper.bib', nargs='+', type=str, help='input bibtex files')
+  parser.add_argument('-f', '--force', action='store_true', help='force output of merged bib file')
+  parser.add_argument('-o', '--output', default=None, help='write output to file instead of stdout')
+  parser.add_argument('--download', action='store_true', help='download required nltk datasets')
+
+  args = parser.parse_args()
+  exit(main(args))
