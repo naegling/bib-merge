@@ -25,4 +25,3 @@ Requirements:
 * nltk datasets ('stopwords', 'punkt', 'wordnet', 'averaged_perceptron_tagger')
 
 `bib-merge` writes detected conflicts to stderr.  Conflicts consist of duplicated citekeys or similar publication titles.  The tool detects similar titles with a few natural language primitives (e.g dropping stop words and lemmatizing the remaining words).   
-
